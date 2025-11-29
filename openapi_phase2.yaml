@@ -1,0 +1,1085 @@
+openapi: 3.1.0
+info:
+  title: Health Facilities Backend API (Phase 2)
+  version: 0.2.0
+  description: >
+    API contract for the Health Facilities Finder backend - Phase 2.
+    Includes Search Engine integration and Per-Service Queue Management.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      description: Standard error envelope returned on non-2xx responses.
+      properties:
+        detail:
+          type: string
+          description: Human-readable error message.
+        code:
+          type: string
+          description: Optional machine-readable error code.
+      required:
+        - detail
+
+    FacilityService:
+      type: object
+      description: A single service offered by a facility.
+      properties:
+        category_name:
+          type: string
+        service_name:
+          type: string
+        normalized_category:
+          type: string
+      required:
+        - category_name
+        - service_name
+        - normalized_category
+
+    Facility:
+      type: object
+      description: Full facility record as exposed on the details page.
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+          nullable: true
+        official_name:
+          type: string
+        facility_type_name:
+          type: string
+          nullable: true
+        facility_type_parent:
+          type: string
+          nullable: true
+        keph_level_name:
+          type: string
+          nullable: true
+        owner_name:
+          type: string
+          nullable: true
+        owner_type_name:
+          type: string
+          nullable: true
+        operation_status_name:
+          type: string
+          nullable: true
+        county_name:
+          type: string
+        sub_county_name:
+          type: string
+          nullable: true
+        constituency_name:
+          type: string
+          nullable: true
+        ward_name:
+          type: string
+          nullable: true
+        town_name:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: float
+        longitude:
+          type: number
+          format: float
+        location_desc:
+          type: string
+          nullable: true
+        open_public_holidays:
+          type: boolean
+          description: True if the facility is open on public holidays.
+        open_weekends:
+          type: boolean
+          description: True if the facility is open on weekends.
+        open_whole_day:
+          type: boolean
+          description: True if the facility is open 24 hours (whole day).
+        services_count:
+          type: integer
+        number_of_beds:
+          type: integer
+          nullable: true
+        number_of_inpatient_beds:
+          type: integer
+          nullable: true
+        number_of_maternity_beds:
+          type: integer
+          nullable: true
+        number_of_cots:
+          type: integer
+          nullable: true
+        number_of_emergency_casualty_beds:
+          type: integer
+          nullable: true
+        number_of_icu_beds:
+          type: integer
+          nullable: true
+        number_of_hdu_beds:
+          type: integer
+          nullable: true
+        number_of_isolation_beds:
+          type: integer
+          nullable: true
+        number_of_general_theatres:
+          type: integer
+          nullable: true
+        number_of_maternity_theatres:
+          type: integer
+          nullable: true
+        number_of_minor_theatres:
+          type: integer
+          nullable: true
+        number_of_eye_theatres:
+          type: integer
+          nullable: true
+        new_born_unit:
+          type: boolean
+        has_beds:
+          type: boolean
+        has_cots:
+          type: boolean
+        facility_services:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacilityService'
+      required:
+        - id
+        - official_name
+        - county_name
+        - latitude
+        - longitude
+        - open_public_holidays
+        - open_weekends
+        - open_whole_day
+        - services_count
+        - new_born_unit
+        - has_beds
+        - has_cots
+        - facility_services
+
+    FacilityListItem:
+      type: object
+      description: Minimal facility projection used in list/search views.
+      properties:
+        id:
+          type: string
+        official_name:
+          type: string
+        county_name:
+          type: string
+        sub_county_name:
+          type: string
+          nullable: true
+        facility_type_name:
+          type: string
+          nullable: true
+        keph_level_name:
+          type: string
+          nullable: true
+        owner_type_name:
+          type: string
+          nullable: true
+        operation_status_name:
+          type: string
+          nullable: true
+        has_beds:
+          type: boolean
+        has_cots:
+          type: boolean
+        open_weekends:
+          type: boolean
+          description: True if the facility is open on weekends.
+        distance_km:
+          type: number
+          format: float
+          nullable: true
+          description: >
+            Distance from the query point in kilometres when a location filter
+            is supplied; otherwise null or omitted.
+      required:
+        - id
+        - official_name
+        - county_name
+        - has_beds
+        - has_cots
+        - open_weekends
+
+    FacilityListResponse:
+      type: object
+      description: Paginated list of facilities with optional distance.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacilityListItem'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+      required:
+        - items
+        - page
+        - page_size
+        - total
+
+    User:
+      type: object
+      description: Authenticated user model (employee or admin).
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [employee, admin]
+        facility_id:
+          type: string
+          nullable: true
+          description: >
+            For employees, the facility they are attached to. For global admins,
+            null.
+      required:
+        - id
+        - email
+        - role
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+      required:
+        - email
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        user:
+          $ref: '#/components/schemas/User'
+      required:
+        - access_token
+        - token_type
+        - user
+
+    ServiceState:
+      type: object
+      description: Availability status for a specific service today.
+      properties:
+        service_name:
+          type: string
+        available_today:
+          type: boolean
+      required:
+        - service_name
+        - available_today
+
+    FacilityStateUpdate:
+      type: object
+      description: >
+        Payload submitted by a facility employee to describe the current,
+        time-scoped state for today (service availability only). Use the
+        separate max-patient-limit endpoint to update the maximum patient limit.
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceState'
+      required: []
+
+    MaxPatientLimitUpdate:
+      type: object
+      description: Payload to update the maximum patient limit for a facility.
+      properties:
+        max_patient_limit:
+          type: integer
+          minimum: 1
+          description: >
+            Maximum number of patients the facility can accommodate. Default is 50.
+            Cannot be deleted, only updated or reset to default.
+        reset_to_default:
+          type: boolean
+          default: false
+          description: >
+            If true, resets max_patient_limit to the default value (50).
+            When reset_to_default is true, max_patient_limit is ignored.
+      required: []
+
+    FacilityState:
+      type: object
+      description: >
+        Current state snapshot. Service availability semantics are identical to
+        Phase 1 (per-service availability flags), but in Phase 2
+        current_patient_count is a computed aggregate of all active tickets in
+        service queues. busy_level is automatically computed when max_patient_limit
+        is set, based on current_patient_count relative to the limit.
+      properties:
+        facility_id:
+          type: string
+        current_patient_count:
+          type: integer
+          description: "Computed total from active tickets."
+        busy_level:
+          type: string
+          enum: [quiet, normal, busy]
+          description: >
+            Automatically computed based on current_patient_count vs max_patient_limit.
+        max_patient_limit:
+          type: integer
+          minimum: 1
+          default: 50
+          description: >
+            Maximum patient capacity set by the facility. Default is 50.
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceState'
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - facility_id
+        - current_patient_count
+        - services
+        - updated_at
+
+    AdminCreateUser:
+      type: object
+      description: Create a new employee or admin user.
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        role:
+          type: string
+          enum: [employee, admin]
+        facility_id:
+          type: string
+          nullable: true
+          description: Required when role is employee; ignored for admins.
+      required:
+        - email
+        - password
+        - role
+
+    AdminUpdateUser:
+      type: object
+      description: Patch-style payload for updating user metadata.
+      properties:
+        password:
+          type: string
+          format: password
+        role:
+          type: string
+          enum: [employee, admin]
+        facility_id:
+          type: string
+          nullable: true
+
+    # --- NEW PHASE 2 SCHEMAS ---
+
+    QueueTicket:
+      type: object
+      description: A ticket issued to a patient.
+      properties:
+        ticket_number:
+          type: integer
+          description: Sequential ticket number.
+        service_name:
+          type: string
+      required:
+        - ticket_number
+        - service_name
+
+    QueueState:
+      type: object
+      description: >
+        Status of a service queue. Reflects active tickets.
+      properties:
+        service_name:
+          type: string
+        active_tickets:
+          type: array
+          items:
+            type: integer
+          description: >
+            List of active ticket numbers currently.
+        patient_count:
+          type: integer
+          description: Total number of people waiting in this queue.
+      required:
+        - service_name
+        - active_tickets
+        - patient_count
+
+    AddQueueRequest:
+      type: object
+      properties:
+        service_name:
+          type: string
+      required:
+        - service_name
+
+    ServeQueueRequest:
+      type: object
+      properties:
+        service_name:
+          type: string
+        ticket_number:
+          type: integer
+      required:
+        - service_name
+        - ticket_number
+
+
+paths:
+  /api/echo:
+    get:
+      summary: Echo a message.
+      description: >
+        Simple health-check endpoint that echoes back the provided message.
+      parameters:
+        - in: query
+          name: message
+          required: true
+          schema:
+            type: string
+          description: Arbitrary text to echo back.
+      responses:
+        '200':
+          description: Successful echo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required:
+                  - message
+
+  /api/facilities-filter:
+    get:
+      summary: List facilities (Phase 2 - with Search).
+      description: >
+        Returns a paginated list of facilities filtered by administrative unit,
+        services, facility details, availability flags, and optional location radius.
+        Includes free-text search in Phase 2.
+      parameters:
+        # Administrative unit
+        - in: query
+          name: county
+          schema:
+            type: string
+          description: County name.
+        - in: query
+          name: sub_county
+          schema:
+            type: string
+          description: Sub-county name.
+        - in: query
+          name: constituency
+          schema:
+            type: string
+          description: Constituency name.
+        - in: query
+          name: ward
+          schema:
+            type: string
+          description: Ward name.
+        # Services
+        - in: query
+          name: service_category
+          schema:
+            type: string
+          description: Service category to filter by.
+        - in: query
+          name: service
+          schema:
+            type: string
+          description: Specific service to filter by.
+        - in: query
+          name: show_unavailable_today
+          schema:
+            type: boolean
+            default: false
+          description: >
+            If false (default), only facilities where selected services are
+            available today are returned. If true, facilities where services are
+            unavailable today are also included.
+        # Facility details
+        - in: query
+          name: keph_level
+          schema:
+            type: string
+          description: KEPH level filter.
+        - in: query
+          name: facility_type
+          schema:
+            type: string
+          description: Facility type filter.
+        - in: query
+          name: owner_category
+          schema:
+            type: string
+          description: Owner category filter.
+        - in: query
+          name: facility_owner
+          schema:
+            type: string
+          description: Facility owner filter.
+        - in: query
+          name: operation_status
+          schema:
+            type: string
+          description: Operation status filter.
+        - in: query
+          name: has_beds
+          schema:
+            type: boolean
+          description: When true, only facilities with beds are returned.
+        - in: query
+          name: has_cots
+          schema:
+            type: boolean
+          description: When true, only facilities with cots are returned.
+        # Availability flags
+        - in: query
+          name: open_public_holidays
+          schema:
+            type: boolean
+          description: >
+            When true, only facilities open on public holidays are returned.
+        - in: query
+          name: open_weekends
+          schema:
+            type: boolean
+          description: >
+            When true, only facilities open on weekends are returned.
+        - in: query
+          name: open_whole_day
+          schema:
+            type: boolean
+          description: >
+            When true, only facilities open 24 hours (whole day) are returned.
+        # Location-based search
+        - in: query
+          name: latlon
+          schema:
+            type: string
+            pattern: '^-?\d+(\.\d+)?,-?\d+(\.\d+)?$'
+          description: >
+            Optional latitude and longitude in the form "<lat>,<lon>". When
+            provided with radius_km, results are restricted to this radius and
+            distance_km is populated in the response.
+        - in: query
+          name: radius_km
+          schema:
+            type: number
+            format: float
+            default: 2
+            minimum: 0
+          description: >
+            Radius in kilometres for location-based filtering. Defaults to
+            2 km when latlon is provided.
+        # Pagination
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page index.
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of items per page.
+        # --- PHASE 2 SEARCH PARAM ---
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: >
+            Free-text search query. Matches against name and county.
+      responses:
+        '200':
+          description: Paginated list of facilities.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacilityListResponse'
+        '400':
+          description: Invalid filters or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/facilities/{facility_id}:
+    get:
+      summary: Get a facility by ID.
+      description: Return full details for a single facility.
+      parameters:
+        - in: path
+          name: facility_id
+          required: true
+          schema:
+            type: string
+          description: Unique facility identifier.
+      responses:
+        '200':
+          description: Facility found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Facility'
+        '404':
+          description: Facility not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      summary: Log in as an employee or admin.
+      description: >
+        Exchange email and password credentials for an access token and user
+        profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/me:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Get the current authenticated user.
+      description: Return the profile and facility association of the logged-in user.
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/facilities/{facility_id}/state:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Update the current state for a facility.
+      description: >
+        Allows an authenticated employee to submit or update the "today" state
+        (per-service availability) for their facility. Use the separate
+        max-patient-limit endpoint to update the maximum patient limit.
+      parameters:
+        - in: path
+          name: facility_id
+          required: true
+          schema:
+            type: string
+          description: Facility identifier; must match the employee's facility.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacilityStateUpdate'
+      responses:
+        '200':
+          description: Updated state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacilityState'
+        '400':
+          description: Invalid state payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User not allowed to modify this facility.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Facility not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: Get state (Phase 2 - Aggregate).
+      description: >
+        Returns the latest submitted \"today\" state for the given facility,
+        including per-service availability (as in Phase 1), a computed
+        total patient count derived from all active tickets in service queues,
+        and an automatically computed busy_level (if max_patient_limit is set).
+      parameters:
+        - in: path
+          name: facility_id
+          required: true
+          schema:
+            type: string
+          description: Facility identifier.
+      responses:
+        '200':
+          description: Current facility state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacilityState'
+        '404':
+          description: No facility or state found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # --- PHASE 2 QUEUE ENDPOINTS ---
+
+  /api/facilities/{facility_id}/queues/add:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Add patient to service queue.
+      description: Adds a patient to the specified service queue and returns a ticket number.
+      parameters:
+        - in: path
+          name: facility_id
+          required: true
+          schema:
+            type: string
+          description: Facility identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddQueueRequest'
+      responses:
+        '200':
+          description: Ticket issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTicket'
+        '400':
+          description: Invalid request.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden.
+
+  /api/facilities/{facility_id}/queues/serve:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Mark ticket as served.
+      description: >
+        Marks a specific ticket as served, removing it from the queue.
+      parameters:
+        - in: path
+          name: facility_id
+          required: true
+          schema:
+            type: string
+          description: Facility identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServeQueueRequest'
+      responses:
+        '200':
+          description: Ticket processed successfully.
+        '400':
+          description: Invalid request.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden.
+
+  /api/facilities/{facility_id}/queues/list:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Get queue status for a service.
+      description: >
+        Returns current active tickets and patient count for a specific service
+        queue.
+      parameters:
+        - in: path
+          name: facility_id
+          required: true
+          schema:
+            type: string
+          description: Facility identifier.
+        - in: query
+          name: service_name
+          required: true
+          schema:
+            type: string
+          description: Name of the service to query.
+      responses:
+        '200':
+          description: Queue state returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueState'
+        '400':
+          description: Missing parameters.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden.
+
+  /api/facilities/{facility_id}/max-patient-limit:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Update the maximum patient limit for a facility.
+      description: >
+        Allows an authenticated employee to set or update the maximum patient
+        limit for their facility. Default limit is 50. The limit cannot be deleted, only updated or reset to
+        default using reset_to_default=true.
+      parameters:
+        - in: path
+          name: facility_id
+          required: true
+          schema:
+            type: string
+          description: Facility identifier; must match the employee's facility.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaxPatientLimitUpdate'
+      responses:
+        '200':
+          description: Maximum patient limit updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacilityState'
+        '400':
+          description: Invalid max patient limit payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User not allowed to modify this facility.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Facility not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/users:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Create a new user.
+      description: >
+        Allows a global admin to create a new employee or admin user with
+        credentials and role. Credentials may be distributed out-of-band.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateUser'
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid user payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User is not a global admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/users/{user_id}:
+    patch:
+      security:
+        - bearerAuth: []
+      summary: Update a user account.
+      description: >
+        Allows a global admin to update a user account, including role, facility
+        assignment, and password.
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+          description: User identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateUser'
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid update payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User is not a global admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      security:
+        - bearerAuth: []
+      summary: Delete or deactivate a user account.
+      description: >
+        Allows a global admin to deactivate or remove a user account.
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+          description: User identifier.
+      responses:
+        '204':
+          description: User removed or deactivated.
+        '401':
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User is not a global admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
