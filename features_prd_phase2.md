@@ -11,7 +11,7 @@ search** that respects multiple terms and the current filters.
 **Core behaviour**
 
 - A search box allows users to type queries such as `hospital saint MATERNITY`.
-- The backend integrates the partially implemented Rust-backed search library to:
+- The backend implements search functionality to:
     - Tokenize the query into terms.
     - Return facilities where **every query term** appears somewhere in the indexed fields.
       - Full implementation should index **all text fields** official_name, county_name, facility_type_name, owner_type_name, operation_status_name, service names, service categories, etc.
@@ -184,7 +184,6 @@ The core Phase 1 features provide essential facility discovery and status functi
 
 **F6 – Search API & search engine integration**
 - `GET /api/facilities-filter` – EXTENDED: add optional `q` query parameter for free-text search.
-  - Integrates Rust search engine.
   - Results ranked by relevance.
   - Respects all filters from F1/F2.
 
